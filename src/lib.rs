@@ -3,7 +3,7 @@ use std::{error, path::PathBuf};
 use cli::Cli;
 use clap::Parser;
 mod cli;
-mod task;
+pub mod task;
 
 pub fn run() -> Result<(), Box<dyn error::Error>> {
     let cli = Cli::parse();

@@ -9,8 +9,23 @@ use std::fmt::Result as fmtResult;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Task {
     name: String,
+    state: State,
+    tags: Vec<Tag>,
+    notes: Option<String>,
     #[serde(with = "ts_seconds")]
     creted_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum State {
+    Active,
+    Complete,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Tag {
+    tag_str: String,
 }
 
 impl Display for Task {
@@ -26,6 +41,9 @@ impl Task {
     fn new(name: String) -> Self {
         Task {
             name,
+            state: State::Active,
+            tags: Vec::new(),
+            notes: None,
             creted_at: Utc::now(),
         }
     }
@@ -45,6 +63,15 @@ impl Task {
         Ok(())
     }
 
+
+    /// The method fetches the current tasks as a vec from the Json
+    /// and add a new task by pushing to the vec and write back to the Json
+    /// # Examples
+    /// ```
+    /// use rusty_journal_clap::task;
+    /// use std::path::PathBuf;
+    /// task::Task::add(PathBuf::from("todo.json"), "new_task".to_string());
+    /// ```
     pub fn add(journal_path: PathBuf, name: String) -> ioResult<()> {
         let f = OpenOptions::new()
                                 .write(true)
@@ -74,6 +101,14 @@ impl Task {
         Ok(())
     }
 
+    /// The method fetches the current tasks into a vec from the Json
+    /// and prints them out. Empty tasks is specifically handled within
+    /// # Examples
+    /// ```
+    /// use rusty_journal_clap::task;
+    /// use std::path::PathBuf;
+    /// task::Task::list(PathBuf::from("todo.json"));
+    /// ```    
     pub fn list(journal_path: PathBuf) -> ioResult<()> {        
         let f = OpenOptions::new()
                             // write must be set first to enable create
@@ -99,6 +134,14 @@ impl Task {
         Ok(())
     }
 
+    /// The method fetches the current tasks into a vec from the Json
+    /// and prints them out. Empty tasks is specifically handled within
+    /// # Examples
+    /// ```
+    /// use rusty_journal_clap::task;
+    /// use std::path::PathBuf;
+    /// task::Task::remove(PathBuf::from("todo.json"), 1);
+    /// ```      
     pub fn remove(journal_path: PathBuf, index: usize) -> ioResult<()> {
         let f = OpenOptions::new()
                             .read(true)
