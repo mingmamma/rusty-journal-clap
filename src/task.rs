@@ -25,7 +25,14 @@ pub struct Task {
 #[serde(tag = "type")]
 enum State {
     Active,
-    Complete,
+    // Comment: it is desirable that the complete variant is a Tuple variant that instead of a struct variant
+    // s.t. the field key is omitted since it is redundant information. See available types of the Enum variants:
+    // https://doc.rust-lang.org/std/keyword.enum.html
+    // However, the implication is that the current convinient feature of automatic derivation of codec for the DateTime value
+    // SEEMS to be only applicable to use with in a Struct structure and unclear how the same effect can be done in a Tuple structure
+    Complete{
+    #[serde(with = "ts_seconds")]
+    completed_at: DateTime<Utc>},
 }
 
 
@@ -48,7 +55,16 @@ impl Task {
         }
     }
 
-    fn _get_tasks(file: impl Read) -> ioResult<Vec<Task>>  {
+    fn completed(&mut self) {
+        self.state = State::Complete{completed_at: Utc::now()};
+    }
+
+    // fn _get_tasks(file: impl Read) -> ioResult<Vec<Task>>  {
+    fn _get_tasks(file: impl Read) -> serde_json::Result<Vec<Task>> {
+        // It's interesting that the Deserialize trait is ONLY implemented for Task struct
+        // But serde_json::from_reader call can deserialize to a Vec of Task, which 
+        // presumably requires Vec<Task>: DeserializeOwned
+        // https://docs.rs/serde_json/latest/serde_json/de/fn.from_reader.html
         let tasks = match serde_json::from_reader(file)  {
             Ok(tasks) => tasks,
             Err(err) if err.is_eof() => Vec::new(),
@@ -102,7 +118,7 @@ impl Task {
     }
 
     /// The method fetches the current tasks into a vec from the Json
-    /// and prints them out. Empty tasks is specifically handled within
+    /// and removes the task identified by the user input index (with validation)
     /// # Examples
     /// ```
     /// use rusty_journal_clap::task;
@@ -144,6 +160,49 @@ impl Task {
 
         Ok(())
     }
+
+    /// The method fetches the current tasks into a vec from the Json
+    /// and update the task identified by the user input index (with validation) to completed state
+    /// # Examples
+    /// ```
+    /// use rusty_journal_clap::task;
+    /// use std::path::PathBuf;
+    /// task::Task::complete(PathBuf::from("todo.json"), 1);    
+    pub fn complete(journal_path: PathBuf, index: usize) -> ioResult<()> {
+        let f = OpenOptions::new()
+                            .read(true)
+                            .open(&journal_path)?;
+        
+        let f = BufReader::new(f);
+
+        let mut tasks = Self::_get_tasks(f)?;
+
+
+        // Thinking from the user input perspective:
+        // User is expected to put in an index from 0 to the number of tasks (task.len())
+        // Hence that expectaion is combined with index bound check and error reporting as following
+        if index == 0 || index > tasks.len() {
+            return Err(Error::new(ErrorKind::InvalidInput, "Invalid Task ID"));
+
+        }
+        // With the check above in place, this access by index call is certain to NOT PANIC
+        let task_to_complete = &mut tasks[index-1];
+        task_to_complete.completed();
+
+        let f = OpenOptions::new()
+                    // Required as otherwise we overwrite the file with data smaller than
+                    // the current content presumably from the start of file as seek position
+                    // which corrupts the data
+                    .truncate(true)
+                    .write(true)
+                    .open(&journal_path)?;
+
+        let f = BufWriter::new(f);
+
+        Self::_write_tasks(&tasks, f)?;
+
+        Ok(())
+    }    
 
     /// The method fetches the current tasks into a vec from the Json
     /// and prints them out. Empty tasks is specifically handled within
